@@ -319,6 +319,46 @@ class TestNop(unittest.TestCase):
         clean_lines = strip_comments(res)
         self.assertEqual(expected_lines, clean_lines[:3])
 
+    def test_nop_lw_sw_pair_extern_uses_gp(self):
+        """
+        gcc emits the .extern (with its size) after the store: a small extern is
+        $gp-relative, so the store reads the loaded register and needs a nop
+        """
+        lines = [
+            "	lw	$2,D_8008B328",
+            "	sw	$2,D_8008B330",
+            "	.extern	D_8008B330, 4",
+            "	.extern	D_8008B328, 4",
+        ]
+        expected_lines = [
+            "lw\t$2,D_8008B328",
+            "nop",
+            "sw\t$2,D_8008B330",
+        ]
+        mp = MaspsxProcessor(lines, sdata_limit=8)
+        res = mp.process_lines()
+
+        clean_lines = strip_comments(res)
+        self.assertEqual(expected_lines, clean_lines[:3])
+        self.assertNotIn(".section .sbss", clean_lines)
+
+    def test_nop_lw_sw_pair_extern_too_big_for_gp(self):
+        lines = [
+            "	lw	$2,D_8008B328",
+            "	sw	$2,D_8008B330",
+            "	.extern	D_8008B330, 16",
+            "	.extern	D_8008B328, 4",
+        ]
+        expected_lines = [
+            "lw\t$2,D_8008B328",
+            "sw\t$2,D_8008B330",
+        ]
+        mp = MaspsxProcessor(lines, sdata_limit=8)
+        res = mp.process_lines()
+
+        clean_lines = strip_comments(res)
+        self.assertEqual(expected_lines, clean_lines[:2])
+
     def test_nop_lh_sw_pair_gp_disabled(self):
         lines = [
             "	.lcomm	Map_water_height,2",
